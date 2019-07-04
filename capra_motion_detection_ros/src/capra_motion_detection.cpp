@@ -16,7 +16,7 @@ using namespace std;
 //our sensitivity value to be used in the absdiff() function
 const static int SENSITIVITY_VALUE = 20;
 //size of blur used to smooth the intensity image output from absdiff() function
-const static int BLUR_SIZE = 30;
+const static int BLUR_SIZE = 20;
 //we'll have just one object to search for
 //and keep track of its position.
 int theObject[2] = {0,0};
@@ -164,7 +164,8 @@ int main(int argc, char *argv[])
     string source_encoding;
     
     nh.param<string>("source_encoding",source_encoding,"");
-    //ROS_DEBUG("Source: %s",source);
+    ROS_INFO("Source: %s",source.c_str());
+    ROS_INFO("Output: %s",output.c_str());    
     image_transport::Subscriber sub = it.subscribe(source, 1, [&](const sensor_msgs::ImageConstPtr& msg)
     {
 
