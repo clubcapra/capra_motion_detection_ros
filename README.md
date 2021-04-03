@@ -47,5 +47,7 @@ Although it is made to be use with ROS Melodic, which means it install OpenCV 3.
 - 6 Install OpenCV lib for ROS
   - 6.1 There a library for ROS to use OpenCV
     - image_geometry
+    - cv_bridge
+    - image_transport
   - 6.2 Install them
-    - `sudo apt install ros-melodic-image-geometry`
+    - `sudo apt install ros-melodic-image-geometry` ros-melodic-image-transport ros-melodic-cv-bridge
