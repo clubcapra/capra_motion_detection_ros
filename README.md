@@ -50,4 +50,4 @@ Although it is made to be use with ROS Melodic, which means it install OpenCV 3.
     - cv_bridge
     - image_transport
   - 6.2 Install them
-    - `sudo apt install ros-melodic-image-geometry` ros-melodic-image-transport ros-melodic-cv-bridge
+    - `sudo apt install ros-melodic-image-geometry ros-melodic-image-transport ros-melodic-cv-bridge`
