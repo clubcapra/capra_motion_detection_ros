@@ -49,3 +49,16 @@ Although it is made to be use with ROS Melodic, which means it install OpenCV 3.
     - image_geometry
   - 6.2 Install them
     - `sudo apt install ros-melodic-image-geometry`
+
+
+## Test with webcam 
+- Install `usb_cam` and `rqt_image_view`
+  - `sudo apt install ros-melodic-usb-cam ros-melodic-rqt-image-view`
+- Reboot
+- Launch a roscore in a terminal 
+  - `roscore`
+- Launch `usb_cam`
+  - `rosrun usb_cam usb_cam_node`
+- Launch `rqt_image_view`
+  - `rosrun rqt_image_view rqt_image_view`
+- In the rqt_image_view select the `usb_cam/image_raw` topic
