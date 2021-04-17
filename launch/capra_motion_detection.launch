@@ -12,7 +12,8 @@
 
     <!-- Capra motion detection node-->
     <node pkg="capra_motion_detection" type="capra_motion_detection" name="capra_motion_detection_node" output="screen">
-        <param name="source" type="string" value="$(arg source)" />
+        <!-- <param name="source" type="string" value="$(arg source)" /> -->
+        <param name="source" type="string" value="/usb_cam_node/image_raw" />
         <param name="source_encoding" type="string" value="$(arg source_encoding)" />
     </node>
 
