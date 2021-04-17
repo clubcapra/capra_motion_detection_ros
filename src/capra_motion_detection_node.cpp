@@ -1,5 +1,5 @@
 #include <image_transport/image_transport.h>
-#include "ros/ros.h"
+#include <ros/ros.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/tracking.hpp>
 #include <opencv2/core/ocl.hpp>
@@ -13,14 +13,27 @@
 using namespace cv;
 using namespace std;
 
+static string source_encoding;
+static string source;
+
+static Mat last_frame;
+static Mat current_frame;
+
+static image_transport::Publisher pub_motion;
+static image_transport::Publisher pub_motion_focus;
+static image_transport::Publisher pub_difference;
+static image_transport::Publisher pub_threshold;
+static image_transport::Publisher pub_blurred_threshold;
+
 // our sensitivity value to be used in the absdiff() function
 const static int SENSITIVITY_VALUE = 20;
 // size of blur used to smooth the intensity image output from absdiff() function
 const static int BLUR_SIZE = 30;
+
 // we'll have just one object to search for
 // and keep track of its position.
-int theObject[2] = { 0, 0 };
 // bounding rectangle of the object, we will use the center of this as its position.
+int theObject[2] = { 0, 0 };
 
 // int to string helper function
 string intToString(int number)
@@ -129,127 +142,135 @@ cv::Rect searchForMovement(Mat thresholdImage, Mat& cameraFeed)
     }
 }
 
-int main(int argc, char* argv[])
+void imageTransportCallback(const sensor_msgs::ImageConstPtr& msg)
 {
-    ros::init(argc, argv, "capra_motion_detection_static_publisher");
-
-    ros::NodeHandle nh("~");
-
-    Mat last_frame;
-    Mat current_frame;
-
-    string source;
-    nh.param<string>("source", source, "");
-    string output = source.substr(0, source.find_first_of("/", 1)) + "/motion_detection" +
-                    source.substr(source.find_first_of("/", 1));
-    cv::namedWindow("view");
-    cv::startWindowThread();
-    image_transport::ImageTransport it(nh);
-    image_transport::Publisher pub_motion = it.advertise(output + "/motion", 1);
-    image_transport::Publisher pub_motion_focus = it.advertise(output + "/motion_focus", 1);
-    image_transport::Publisher pub_difference = it.advertise(output + "/difference", 1);
-    image_transport::Publisher pub_threshold = it.advertise(output + "/threshold", 1);
-    image_transport::Publisher pub_blurred_threshold = it.advertise(output + "/blurred_threshold", 1);
-
-    string source_encoding;
-
-    nh.param<string>("source_encoding", source_encoding, "");
-    ROS_DEBUG("Source: %s", source);
-    image_transport::Subscriber sub = it.subscribe(source, 1, [&](const sensor_msgs::ImageConstPtr& msg) {
-        try
+    try
+    {
+        // Set first image as last_frame
+        if (last_frame.empty())
         {
-            // Set first image as last_frame
-            if (last_frame.empty())
-            {
-                ROS_DEBUG("Encoding: %s trying %s", msg->encoding.c_str(), source_encoding);
-                last_frame = cv_bridge::toCvShare(msg, source_encoding)->image;
-                return;
-            }
-            current_frame = cv_bridge::toCvShare(msg, source_encoding)->image;
-
-            // cv::imshow("view", cv_bridge::toCvShare(msg, "bgr8")->image);
-            // cv::waitKey(1);
-            // this_thread::sleep_for(std::chrono::milliseconds(1));
+            ROS_DEBUG("Encoding: %s trying %s", msg->encoding.c_str(), source_encoding.c_str());
+            last_frame = cv_bridge::toCvShare(msg, source_encoding)->image;
+            return;
         }
-        catch (cv_bridge::Exception& e)
-        {
-            ROS_ERROR("Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
-        }
+        current_frame = cv_bridge::toCvShare(msg, source_encoding)->image;
 
-        Mat grayImage1, grayImage2;
-        // resulting difference image
-        Mat differenceImage;
-        // thresholded difference image (for use in findContours() function)
-        Mat thresholdImage;
+        // cv::imshow("view", cv_bridge::toCvShare(msg, "bgr8")->image);
+        // cv::waitKey(1);
+        // this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    catch (cv_bridge::Exception& e)
+    {
+        ROS_ERROR("Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
+    }
 
-        // read first frame
-        // capture.read(last_frame);
-        // convert last_frame to gray scale for frame differencing
-        cv::cvtColor(last_frame, grayImage1, COLOR_BGR2GRAY);
-        // copy second frame
-        // capture.read(current_frame);
-        // convert current_frame to gray scale for frame differencing
-        cv::cvtColor(current_frame, grayImage2, COLOR_BGR2GRAY);
-        // perform frame differencing with the sequential images. This will output an "intensity image"
-        // do not confuse this with a threshold image, we will need to perform thresholding afterwards.
-        cv::absdiff(grayImage1, grayImage2, differenceImage);
-        // threshold intensity image at a given sensitivity value
-        cv::threshold(differenceImage, thresholdImage, SENSITIVITY_VALUE, 255, THRESH_BINARY);
+    Mat grayImage1, grayImage2;
+    // resulting difference image
+    Mat differenceImage;
+    // thresholded difference image (for use in findContours() function)
+    Mat thresholdImage;
 
-        pub_difference.publish(cv_bridge::CvImage(std_msgs::Header() /* empty header */,
-                                                  sensor_msgs::image_encodings::MONO8 /* image format */,
-                                                  differenceImage /* the opencv image object */
-                                                  )
-                                   .toImageMsg());
-        pub_threshold.publish(cv_bridge::CvImage(std_msgs::Header() /* empty header */,
-                                                 sensor_msgs::image_encodings::MONO8 /* image format */,
-                                                 thresholdImage /* the opencv image object */
-                                                 )
-                                  .toImageMsg());
+    // read first frame
+    // capture.read(last_frame);
+    // convert last_frame to gray scale for frame differencing
+    cv::cvtColor(last_frame, grayImage1, COLOR_BGR2GRAY);
+    // copy second frame
+    // capture.read(current_frame);
+    // convert current_frame to gray scale for frame differencing
+    cv::cvtColor(current_frame, grayImage2, COLOR_BGR2GRAY);
+    // perform frame differencing with the sequential images. This will output an "intensity image"
+    // do not confuse this with a threshold image, we will need to perform thresholding afterwards.
+    cv::absdiff(grayImage1, grayImage2, differenceImage);
+    // threshold intensity image at a given sensitivity value
+    cv::threshold(differenceImage, thresholdImage, SENSITIVITY_VALUE, 255, THRESH_BINARY);
 
-        // blur the image to get rid of the noise. This will output an intensity image
-        cv::blur(thresholdImage, thresholdImage, cv::Size(BLUR_SIZE, BLUR_SIZE));
-
-        int erosion_size = 10;
-        Mat element = getStructuringElement(MORPH_ELLIPSE, Size(2 * erosion_size + 1, 2 * erosion_size + 1),
-                                            Point(erosion_size, erosion_size));
-
-        /// Apply the erosion operation
-        erode(thresholdImage, thresholdImage, element);
-        dilate(thresholdImage, thresholdImage, element);
-
-        // threshold again to obtain binary image from blur output
-        cv::threshold(thresholdImage, thresholdImage, SENSITIVITY_VALUE, 255, THRESH_BINARY);
-
-        pub_blurred_threshold.publish(cv_bridge::CvImage(std_msgs::Header() /* empty header */,
-                                                         sensor_msgs::image_encodings::MONO8 /* image format */,
-                                                         thresholdImage /* the opencv image object */
-                                                         )
-                                          .toImageMsg());
-
-        // if tracking enabled, search for contours in our thresholded image
-        // if(trackingEnabled){
-
-        cv::Rect new_roi = searchForMovement(thresholdImage, last_frame);
-        // Convert opencv image to ROS sensor_msgs image
-        // Publish the ROS sensor_msgs image);
-
-        if (new_roi.y > 0 && new_roi.y < thresholdImage.rows && new_roi.x > 0 && new_roi.x < thresholdImage.cols)
-        {
-            focusSearchForMovement(new_roi, differenceImage, last_frame);
-        }
-
-        pub_motion.publish(cv_bridge::CvImage(std_msgs::Header() /* empty header */,
-                                              sensor_msgs::image_encodings::BGR8 /* image format */,
-                                              last_frame /* the opencv image object */
+    pub_difference.publish(cv_bridge::CvImage(std_msgs::Header() /* empty header */,
+                                              sensor_msgs::image_encodings::MONO8 /* image format */,
+                                              differenceImage /* the opencv image object */
                                               )
                                .toImageMsg());
+    pub_threshold.publish(cv_bridge::CvImage(std_msgs::Header() /* empty header */,
+                                             sensor_msgs::image_encodings::MONO8 /* image format */,
+                                             thresholdImage /* the opencv image object */
+                                             )
+                              .toImageMsg());
 
-        // set current_frame to last_frame for next time
-        last_frame = current_frame;
-    });
-    ros::spin();
+    // blur the image to get rid of the noise. This will output an intensity image
+    cv::blur(thresholdImage, thresholdImage, cv::Size(BLUR_SIZE, BLUR_SIZE));
+
+    int erosion_size = 10;
+    Mat element = getStructuringElement(MORPH_ELLIPSE, Size(2 * erosion_size + 1, 2 * erosion_size + 1),
+                                        Point(erosion_size, erosion_size));
+
+    /// Apply the erosion operation
+    erode(thresholdImage, thresholdImage, element);
+    dilate(thresholdImage, thresholdImage, element);
+
+    // threshold again to obtain binary image from blur output
+    cv::threshold(thresholdImage, thresholdImage, SENSITIVITY_VALUE, 255, THRESH_BINARY);
+
+    pub_blurred_threshold.publish(cv_bridge::CvImage(std_msgs::Header() /* empty header */,
+                                                     sensor_msgs::image_encodings::MONO8 /* image format */,
+                                                     thresholdImage /* the opencv image object */
+                                                     )
+                                      .toImageMsg());
+
+    // if tracking enabled, search for contours in our thresholded image
+    // if(trackingEnabled){
+
+    cv::Rect new_roi = searchForMovement(thresholdImage, last_frame);
+    // Convert opencv image to ROS sensor_msgs image
+    // Publish the ROS sensor_msgs image);
+
+    if (new_roi.y > 0 && new_roi.y < thresholdImage.rows && new_roi.x > 0 && new_roi.x < thresholdImage.cols)
+    {
+        focusSearchForMovement(new_roi, differenceImage, last_frame);
+    }
+
+    pub_motion.publish(cv_bridge::CvImage(std_msgs::Header() /* empty header */,
+                                          sensor_msgs::image_encodings::BGR8 /* image format */,
+                                          last_frame /* the opencv image object */
+                                          )
+                           .toImageMsg());
+
+    // set current_frame to last_frame for next time
+    last_frame = current_frame;
+}
+
+int main(int argc, char** argv)
+{
+    ros::init(argc, argv, "capra_motion_detection_node");
+
+    ros::NodeHandle nodeHandle("~");
+
+    ros::Rate loop_rate(10);
+
+    // Fetch source parameter
+    nodeHandle.param<string>("source", source, "");
+
+    // Fetch source_encoding parameter
+    nodeHandle.param<string>("source_encoding", source_encoding, "");
+
+    // Setting up ImageTransport node
+    image_transport::ImageTransport imageTransportNode(nodeHandle);
+    pub_motion = imageTransportNode.advertise("motion", 1);
+    pub_motion_focus = imageTransportNode.advertise("motion_focus", 1);
+    pub_difference = imageTransportNode.advertise("difference", 1);
+    pub_threshold = imageTransportNode.advertise("threshold", 1);
+    pub_blurred_threshold = imageTransportNode.advertise("blurred_threshold", 1);
+
+    image_transport::Subscriber sub = imageTransportNode.subscribe(source, 1, imageTransportCallback);
+    
     // cv::destroyWindow("view");
+    // cv::namedWindow("view");
+    // cv::startWindowThread();
+
+    while (ros::ok())
+    {
+        ROS_INFO("Source: [%s]", source.c_str());
+        ros::spinOnce();
+        loop_rate.sleep();
+    }
 
     return 0;
 }
