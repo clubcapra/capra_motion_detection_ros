@@ -79,7 +79,7 @@ void focusSearchForMovement(cv::Rect roi, cv::Mat differenceImage, cv::Mat &last
             for (int i = 0; i < 4; ++i) {
 		cv::Point2f start_point(vertices[i].x+roi.x,vertices[i].y+roi.y);
 		cv::Point2f end_point(vertices[(i+1)%4].x+roi.x,vertices[(i+1)%4].y+roi.y);
-                    cv::line(last_frame, start_point, end_point, cv::Scalar(0, 255, 0), 2, CV_AA);
+                    cv::line(last_frame, start_point, end_point, cv::Scalar(0, 255, 0), 2, CV_LU);
             }
 	}
     }
@@ -127,7 +127,7 @@ cv::Rect searchForMovement(Mat thresholdImage, Mat &cameraFeed){
             rrect.points(vertices);
             for (int i = 0; i < 4; ++i)
             {
-                    cv::line(cameraFeed, vertices[i], vertices[(i + 1) % 4], cv::Scalar(0, 0, 255), 2, CV_AA);
+                    cv::line(cameraFeed, vertices[i], vertices[(i + 1) % 4], cv::Scalar(0, 0, 255), 2, CV_LU);
             }
 
 	    return objectBoundingRectangle;
